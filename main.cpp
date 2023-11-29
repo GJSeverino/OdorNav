@@ -1,16 +1,15 @@
 // *******************************************************************************************
-//       Gabriel Juliano Severino 
-//               2023
+//                             Gabriel Juliano Severino 
+//                                      2023
 //
-//       Active Respiratory Agent 
-// 
+//            Chemoreceptive Navigation in Static and Fluctuating Environments
 //
 // TO DO:
 // 
 // 
 // *******************************************************************************************
 
-#include "OdorPuff.h"
+#include "Fluid.h"
 #include "TSearch.h"
 #include "Sniffer.h"
 #include "CTRNN.h"
@@ -21,8 +20,8 @@
 
 // Task params
 const double StepSize = 0.01;
-const double RunDuration = 5000; // 800.0;
-const double TransDuration = 3000.0; // Transient duration 
+const double RunDuration = 100; // 6000 and 5000 for transient 
+const double TransDuration = 80.0; // Transient duration 
 const double EvalDuration = RunDuration - TransDuration; // Evaluation duration
 
 const double SpaceHeight = 100.0; // Size of the space
@@ -31,16 +30,30 @@ const double SpaceWidth = 100.0;
 const double peakPositionX = 50.0; // Position of the chemical source
 const double peakPositionY = 50.0; 
 
+// Plume params
+
+const double nu = 0.0000001;             // Kinematic viscosity
+const double diffusionRate = 0.0;
+const double dt_fluid = 0.1; // Time step for NS simulation
+
+
+const int nsStepsPerAgentStep = static_cast<int>(1); // 10 steps per agent step StepSize / deltaTimeNS
+const int totalAgentSteps = static_cast<int>(RunDuration / StepSize); 
+
+
+
+
+
 // EA params
-const int POPSIZE = 300; //500 
-const int GENS = 100; //100
-const double MUTVAR = 0.15;
+const int POPSIZE = 1; //500 
+const int GENS = 1; //100
+const double MUTVAR = 0.2;
 const double CROSSPROB = 0.05;
 const double EXPECTED = 1.1;
 const double ELITISM = 0.02;
 
 // Nervous system params
-const int N = 3;
+const int N = 5;
 const double WR = 8.0;
 const double SR = 8.0;
 const double BR = 8.0;
@@ -95,117 +108,111 @@ double DistanceGradient(double posX, double posY, double peakPosX, double peakPo
     return 1.0 - std::abs(normalized_distance) * steepness;
 }
 
-// ------------------------------------
-// Fitness function 
-// ------------------------------------
-// double FitnessFunction(TVector<double> &genotype, RandomState &rs)
-// {
-// 	// Map genotype to phenotype
-// 	TVector<double> phenotype;
-// 	phenotype.SetBounds(1, VectSize);
-// 	GenPhenMapping(genotype, phenotype);
 
-// 	// Create the agent
-// 	Sniffer Agent(N);
+double FitnessFunctionChemoIndexFLUX(TVector<double> &genotype, RandomState &rs)
+{
+	// Map genotype to phenotype
+	TVector<double> phenotype;
+	phenotype.SetBounds(1, VectSize);
+	GenPhenMapping(genotype, phenotype);
 
-// 	// Instantiate the nervous systems
-// 	Agent.NervousSystem.SetCircuitSize(N);
+	// Create the agent
+	Sniffer Agent(N);
+
+	// Instantiate the nervous systems
+	Agent.NervousSystem.SetCircuitSize(N);
 	
-// 	int k = 1;
+	int k = 1;
 
-// 	// Time-constants
-// 	for (int i = 1; i <= N; i++) {
-// 		Agent.NervousSystem.SetNeuronTimeConstant(i,phenotype(k));
-// 		k++;
-// 	}
-// 	// Biases
-// 	for (int i = 1; i <= N; i++) {
-// 		Agent.NervousSystem.SetNeuronBias(i,phenotype(k));
-// 		k++;
-// 	}
-// 	// Weights
-// 	for (int i = 1; i <= N; i++) {
-// 		for (int j = 1; j <= N; j++) {
-// 			Agent.NervousSystem.SetConnectionWeight(i,j,phenotype(k));
-// 			k++;
-// 		}
-// 	}
-// 	// Sensor Weights
-// 	for (int i = 1; i <= N; i++) {
-// 		Agent.SetSensorWeight(i,phenotype(k));
-// 		k++;
-// 	}
+	// Time-constants
+	for (int i = 1; i <= N; i++) {
+		Agent.NervousSystem.SetNeuronTimeConstant(i,phenotype(k));
+		k++;
+	}
+	// Biases
+	for (int i = 1; i <= N; i++) {
+		Agent.NervousSystem.SetNeuronBias(i,phenotype(k));
+		k++;
+	}
+	// Weights
+	for (int i = 1; i <= N; i++) {
+		for (int j = 1; j <= N; j++) {
+			Agent.NervousSystem.SetConnectionWeight(i,j,phenotype(k));
+			k++;
+		}
+	}
+	// Sensor Weights
+	for (int i = 1; i <= N; i++) {
+		Agent.SetSensorWeight(i,phenotype(k));
+		k++;
+	}
 
-//     double totalfit = 0.0, totaldist = 0.0, dist = 0.0;
-//     double totaltime = 0, totaltrials = 0;
+///////////////////////
 
-//     // Vary the steepness of the gradient
-//     const double minSteepness = 0.5;  
-//     const double maxSteepness = 2.0;  
-//     const double steepnessStep = 0.5;
 
-// 		for (double steepness = minSteepness; steepness <= maxSteepness; steepness += steepnessStep) {
-// 			// for (double x = 1.0; x < SpaceWidth; x += 50) {  // Trials across starting positions
-// 			// 	for(double y = 1.0; y < SpaceHeight; y += 50) {
-// 				double x = rs.UniformRandom(0.0, SpaceWidth);
-// 				double y = rs.UniformRandom(0.0, SpaceHeight);
+    Fluid fluid(dt_fluid, diffusionRate, nu);
 
-// 				// Peak position of chemical gradient
-// 				const double peakPositionX = rs.UniformRandom(0.0, SpaceWidth);
-// 				const double peakPositionY = rs.UniformRandom(0.0, SpaceHeight);
+    int sourceX = 50;      // Example x-coordinate for odor source
+    int sourceY = 50;      // Example y-coordinate for odor source
+    float odorAmount = 10; // Amount of odor to add
+    float velocityX = 2;   // Velocity in the x-direction
+    float velocityY = 2;   // Velocity in the y-direction
 
-// 				// Set agent's position
-// 				Agent.Reset(x,y);
+    double totalFit = 0.0;
+    int trials = 0;
 
-// 				totaldist = 0.0;
-// 				totaltime = 0;
+        for (double theta = 0.0; theta < 2*M_PI; theta += M_PI/2) {  
 
-// 				for (double time = 0; time < RunDuration; time += StepSize) {
+            double x = rs.UniformRandom(0.0, SpaceWidth);
+            double y = rs.UniformRandom(0.0, SpaceHeight);
 
-// 					// Calculate chemical gradient at Sniffer position
-// 					double gradientValue = DistanceGradient(Agent.posX, Agent.posY, peakPositionX, peakPositionY, steepness);
+            // Calculate initial distance
+            double initialDist = sqrt(pow(x - sourceX, 2) + pow(y - sourceY, 2));
+            if (initialDist < 1.0) initialDist = 1.0; // Avoid division by zero
+			// printf("Initial distance: %f\n", initialDist);
 
-// 					// Sense the gradient
-// 					Agent.Sense(gradientValue, time);
+            // Set agent's position
+            Agent.Reset(x, y, theta);
+
+            double dist = 0.0;
+            int agentStepCounter = 0;
+        for (double time = 0; time < RunDuration; time += StepSize) {
+
+				// Calculate chemical gradient at Sniffer position
+				double concentration = fluid.getOdorConcentration(Agent.posX, Agent.posY);
+
+                        // Check if it's time to update the fluid simulation (Step every 10 agent steps)
+                if (agentStepCounter % 10 == 0) {
+                    fluid.addOdor(sourceX, sourceY, odorAmount);
+                    fluid.addVelocity(sourceX, sourceY, velocityX, velocityY);
+                    fluid.step(); 
+                }
+
+				// Sense the gradient
+				Agent.Sense(concentration, time);
 					
-// 					// Move based on sensed gradient
-// 					Agent.Step(StepSize);
+				// Move based on sensed gradient
+				Agent.Step(StepSize);
+                                                                
+            // Evaluate fitness after transient duration
+            if (time > TransDuration) {
+                double dx = std::abs(Agent.posX - sourceX);
+                double dy = std::abs(Agent.posY - sourceY);
+                dist += sqrt(dx * dx + dy * dy);
+                agentStepCounter++;
+            }
+        }
 
-// 					if (time > TransDuration) {
-   						 
-// 						 // Calculate the distance to the peak considering the 2D environment and wrap-around boundaries
-//    					 	double dx = std::abs(Agent.posX - peakPositionX);
-//     					double dy = std::abs(Agent.posY - peakPositionY);
-//     					double directDist = sqrt(dx * dx + dy * dy);
+        double totaldist = (dist / (EvalDuration / StepSize));
+        double fitnessForThisTrial = (initialDist - totaldist) / initialDist;
+        fitnessForThisTrial = fitnessForThisTrial < 0.0 ? 0.0 : fitnessForThisTrial; // Ensure non-negative fitness
 
-//     					// Ensure that the minimum distance is at least 2.0 to avoid division by zero or negative fitness
-//     					if (directDist < 2.0)
-//         					directDist = 2.0;
+        totalFit += fitnessForThisTrial;
+        trials++;
+    }
 
-//     					totaldist += directDist;
-//     					totaltime += 1;
-// 					}
-// 				}
-
-// 					double maxDist = sqrt((SpaceWidth * SpaceWidth) + (SpaceHeight * SpaceHeight)); 
-// 					double averageDist = totaldist / totaltime;
-// 					double fitnessForThisTrial = 0.0;
-// 					double thresholdDistance = 4.0; // Define a threshold distance
-
-// 					if (averageDist < thresholdDistance) {
-// 						// Provide a high fitness score if within threshold distance
-// 						fitnessForThisTrial = 1.0 - exp(-averageDist);
-// 					} else {
-// 						// Penalize heavily if not within threshold distance
-// 						fitnessForThisTrial = exp(-averageDist / maxDist);
-// 					}
-// 					totalfit += fitnessForThisTrial;
-// 					totaltrials += 1;
-// 				}
-
-//     // Average fitness across trials
-//     return totalfit / totaltrials;
-// }
+    return totalFit / trials;
+}
 
 
 double FitnessFunctionChemoIndex(TVector<double> &genotype, RandomState &rs)
@@ -255,7 +262,7 @@ double FitnessFunctionChemoIndex(TVector<double> &genotype, RandomState &rs)
     const double steepnessStep = 0.5;
 
     for (double steepness = minSteepness; steepness <= maxSteepness; steepness += steepnessStep) {
-        for (int reps = 1; reps <= 2; reps++) {  
+        for (double theta = 0.0; theta < 2*M_PI; theta += M_PI/2) {  
 
             double x = rs.UniformRandom(0.0, SpaceWidth);
             double y = rs.UniformRandom(0.0, SpaceHeight);
@@ -267,65 +274,42 @@ double FitnessFunctionChemoIndex(TVector<double> &genotype, RandomState &rs)
             // Calculate initial distance
             double initialDist = sqrt(pow(x - peakPositionX, 2) + pow(y - peakPositionY, 2));
             if (initialDist < 1.0) initialDist = 1.0; // Avoid division by zero
+			// printf("Initial distance: %f\n", initialDist);
 
             // Set agent's position
-            Agent.Reset(x, y);
+            Agent.Reset(x, y, theta);
 
+            double dist = 0.0;
             double totalDist = 0.0;
-			int evaltimesteps = 0;
 
             for (double time = 0; time < RunDuration; time += StepSize) {
                 
 				// Calculate chemical gradient at Sniffer position
 				double gradientValue = DistanceGradient(Agent.posX, Agent.posY, peakPositionX, peakPositionY, steepness);
+
 				// Sense the gradient
 				Agent.Sense(gradientValue, time);
 					
 				// Move based on sensed gradient
 				Agent.Step(StepSize);
+        
+                if (time > TransDuration) {
+                    double dx = std::abs(Agent.posX - peakPositionX);
+                    double dy = std::abs(Agent.posY - peakPositionY);
+                    dist += sqrt(dx * dx + dy * dy);
+                }
+            }
 
-				if (time > TransDuration) {
-					double dx = std::abs(Agent.posX - peakPositionX);
-					double dy = std::abs(Agent.posY - peakPositionY);
-					totalDist += sqrt(dx * dx + dy * dy);
+            double totaldist = (dist / (EvalDuration / StepSize));
+            double fitnessForThisTrial = (initialDist - totaldist)/initialDist;
+            fitnessForThisTrial = fitnessForThisTrial < 0.0 ? 0.0 : fitnessForThisTrial; // Ensure non-negative fitness
 
-					evaltimesteps++;
-
-					}
-							}
-
-							// Only calculate the average distance if there were evaluation time steps
-							double averageDist = evaltimesteps > 0 ? totalDist / evaltimesteps : initialDist;
-							double normalizedDist = averageDist / initialDist;
-							double fitnessForThisTrial = 1.0 - normalizedDist;
-							fitnessForThisTrial = fitnessForThisTrial < 0.0 ? 0.0 : fitnessForThisTrial; // Ensure non-negative fitness
-
-							totalFit += fitnessForThisTrial;
-							trials++;
-						}
-					}
-					return totalFit / trials;
-				}
-
-
-
-//                 if (time > TransDuration) {
-//                     double dx = std::abs(Agent.posX - peakPositionX);
-//                     double dy = std::abs(Agent.posY - peakPositionY);
-//                     totalDist += sqrt(dx * dx + dy * dy);
-//                 }
-//             }
-
-//             double averageDist = totalDist / (RunDuration / StepSize); // run or eval duration? 
-//             double fitnessForThisTrial = 1.0 - (averageDist / initialDist);
-//             fitnessForThisTrial = fitnessForThisTrial < 0.0 ? 0.0 : fitnessForThisTrial; // Ensure non-negative fitness
-
-//             totalFit += fitnessForThisTrial;
-//             trials++;
-//         }
-//     }
-//     return totalFit / trials;
-// }
+            totalFit += fitnessForThisTrial;
+            trials++;
+        }
+    }
+    return totalFit / trials;
+}
 
 // ================================================
 // FUNCTIONS FOR ANALYZING A SUCCESFUL CIRCUIT
@@ -379,7 +363,7 @@ void BehavioralTraces_Specific(TVector<double> &genotype,double x1, double y1, d
             const double peakPositionY = chemicalsourceY;
 
             // Set agent's position
-            Agent.Reset(x1, y1);
+            Agent.Reset(x1, y1, 0.0);
 
             for (double time = 0; time < RunDuration; time += StepSize) {
                 
@@ -463,7 +447,7 @@ void BehavioralTraces_Across_Conditions(TVector<double> &genotype, double steepn
     // Iterate over all peak positions
     for (int i = 0; i < NumPeakPositions; ++i) {
         // Reset agent to starting position
-        Agent.Reset(initPosX, initPosY);
+        Agent.Reset(initPosX, initPosY, 0.0);
 
         // Peak position of chemical gradient
         double peakPositionX = peakPositionsX[i];
@@ -599,7 +583,8 @@ int main (int argc, const char* argv[])
 	
 	/* Stage 1 */
 	s.SetSearchTerminationFunction(TerminationFunction);
-	s.SetEvaluationFunction(FitnessFunctionChemoIndex); 
+	// s.SetEvaluationFunction(FitnessFunctionChemoIndex); 
+    s.SetEvaluationFunction(FitnessFunctionChemoIndexFLUX);
 
 	s.ExecuteSearch();
 
@@ -612,10 +597,33 @@ int main (int argc, const char* argv[])
 	// TVector<double> genotype(1, VectSize);
 	// genefile >> genotype;
 
+	 // Get the index from the argument
+    // int index = std::stoi(argv[1]);
+	
+	    // Construct the filename
+    // std::string filename = "Evolved_Agents/StaticSensorStaticEnv/5N/Genotypes/best.gen_" + std::to_string(index) + ".dat";
+    
+    
+    
+    
+    // std::string filename = "best.gen.dat";
+
+
+    // ifstream genefile;
+	// genefile.open(filename);
+	// TVector<double> genotype(1, VectSize);
+	// genefile >> genotype;
+
 	// // //     agent x position, agent y position, Peak x position, Peak y position, steepness
 	// BehavioralTraces_Specific(genotype, 10.0, 10.0, 50.0, 50.0, 1.5);
-	//  BehavioralTraces_Across_Conditions(genotype, 1.5);
-	// // BehavioralTraces(genotype, 455.0, 2.5); 
+	// BehavioralTraces_Across_Conditions(genotype, 1.5);
+	// // // // BehavioralTraces(genotype, 455.0, 2.5); 
+
+
+
+
+
+
 
 
 	return 0;

@@ -9,7 +9,7 @@ const double SpaceWidth = 100.0;
 
 // Constants for motion
 const double MaxAngle = M_PI / 12.0; // Pi/12
-const double MaxThrust = 1.0;
+const double MaxThrust = 1.5;
 const double Friction = 0.9;
 
 // Contructor
@@ -34,6 +34,7 @@ void Sniffer::Set(int networksize) {
     pastposX = 0.0;
     pastposY = 0.0;
     velocity = 0.0;
+    pastTheta = 0.0;
     theta = 0.0;
 
     sensor = 0.0;
@@ -41,14 +42,14 @@ void Sniffer::Set(int networksize) {
 }
 
 // Reset the state of the agent
-void Sniffer::Reset(double initposX, double initposY) {
+void Sniffer::Reset(double initposX, double initposY, double initTheta) {
     posX = initposX;
     posY = initposY;
     pastposX = initposX;
     pastposY = initposY;
     sensor = 0.0;
     velocity = 0.0;
-    theta = 0.0;
+    theta = initTheta;
     NervousSystem.RandomizeCircuitState(0.0, 0.0);
 }
 
@@ -61,34 +62,34 @@ double Sniffer::MapBreathingRate(double neuronOutput){
 
 }
 
-// Respiration sense function
-void Sniffer::Sense(double chemical_concentration, double current_time) {
+// // Respiration sense function
+// void Sniffer::Sense(double chemical_concentration, double current_time) {
     
-    // Use the output of neuron 3 to control the breathing rate
-    double breathingRate = MapBreathingRate(NervousSystem.NeuronOutput(3));
+//     // Use the output of neuron 3 to control the breathing rate
+//     double breathingRate = MapBreathingRate(NervousSystem.NeuronOutput(3));
 
-    // Phase of the sin wave determines inhale/exhale cycle 
-    double phase = sin(current_time * 2 * M_PI * breathingRate);
+//     // Phase of the sin wave determines inhale/exhale cycle 
+//     double phase = sin(current_time * 2 * M_PI * breathingRate);
     
-    // Agent perceives the chemical concentration only inhalation (positive phase of the sine wave)
-    if (phase > 0) {
+//     // Agent perceives the chemical concentration only inhalation (positive phase of the sine wave)
+//     if (phase > 0) {
+//         sensor = chemical_concentration * phase; // * phase for a more continuous signal. May need to multiply by derivative of phase. 
+//     } else {
+//         sensor = 0.0;
+//     }
+// }
+
+
+// Normal sense function
+void Sniffer::Sense(double chemical_concentration, double current_time){
+    if (current_time > 0.0) {
+
+        
         sensor = chemical_concentration;
     } else {
         sensor = 0.0;
     }
 }
-
-
-// // Normal sense function
-// void Sniffer::Sense(double chemical_concentration, double current_time){
-//     if (current_time > 0.0) {
-
-        
-//         sensor = chemical_concentration;
-//     } else {
-//         sensor = 0.0;
-//     }
-// }
 
 // Step in time
 void Sniffer::Step(double StepSize) {
@@ -106,7 +107,7 @@ void Sniffer::Step(double StepSize) {
 
         // Constants for motion
     const double MaxAngle = M_PI / 12.0; // Pi/12
-    const double MaxThrust = 1.0;
+    const double MaxThrust = 1.5;
     const double Friction = 0.9;
 
     double outputMotorRight = NervousSystem.NeuronOutput(1); 

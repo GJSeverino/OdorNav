@@ -24,7 +24,7 @@ public:
 
     // Control methods
     void Set(int networksize);
-    void Reset(double initposX, double initposY);
+    void Reset(double initposX, double initposY, double initTheta);
     double MapBreathingRate(double neuronOutput);
     void Sense(double chemical_concentration, double current_time);
     void Step(double StepSize);
